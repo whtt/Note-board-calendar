@@ -1,19 +1,19 @@
-<!-- src/App.vue -->
+<!-- src/App.vue (局部替换) -->
 <template>
   <div class="min-h-screen bg-stone-100 text-stone-800 p-4 md:p-6 flex items-center justify-center font-sans">
-    
     <div class="w-full max-w-[95vw] xl:max-w-7xl bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-stone-300/50 border border-stone-200 flex flex-col overflow-hidden h-[90vh] min-h-[750px] max-h-[1000px]">
       
-      <!-- 🌟 [核心重构]：视图动态分发枢纽 -->
-      <transition name="fade-slide" mode="out-in">
+      <!-- 🌟 [核心重构]：100% 解决白屏的 v-show 方案 -->
+      <div class="flex-1 overflow-hidden flex flex-col min-h-0 relative">
         <!-- 视图 A：案头仪表盘 -->
         <DashboardView 
-          v-if="currentMode === 'dashboard'"
+          v-show="currentMode === 'dashboard'"
+          class="absolute inset-0 z-10 bg-white"
           :selectedDate="selectedDate"
           :tasks="tasks"
           :currentTasks="currentTasks"
           :todayStr="todayStr"
-          :notesCount="savedNotes.length"
+          :notes="savedNotes"
           @update:selectedDate="selectedDate = $event"
           @enter-writing="switchMode('writing')"
           @save-poetry="handleSavePoetry"
@@ -25,20 +25,22 @@
           @change-color="handleChangeColor"
           @update-task="handleUpdateTask"
           @import-tasks="handleImportTasks"
+          @delete-note="handleDeleteNote"
         />
         
         <!-- 视图 B：灵感书斋 -->
         <WritingView 
-          v-else-if="currentMode === 'writing'"
+          v-show="currentMode === 'writing'"
+          class="absolute inset-0 z-20"
           :notes="savedNotes"
           :incomingDraft="draftNote"
           @update-notes="handleUpdateNotes"
           @back="switchMode('dashboard')"
         />
-      </transition>
+      </div>
 
       <!-- 底层状态栏 (保持不变) -->
-      <div class="h-9 shrink-0 border-t border-stone-200 bg-stone-100/80 flex items-center justify-between px-4 text-[11px] text-stone-500 font-medium z-10">
+      <div class="h-9 shrink-0 border-t border-stone-200 bg-stone-100/80 flex items-center justify-between px-4 text-[11px] text-stone-500 font-medium z-30">
         <div class="flex items-center gap-2 truncate max-w-[60%]">
           <span class="text-teal-500 animate-pulse">●</span> 
           <span>{{ currentSavePath }}</span>
@@ -52,7 +54,6 @@
           </button>
         </div>
       </div>
-      
     </div>
   </div>
 </template>
@@ -339,6 +340,11 @@ const handleWriteEssay = (poetry) => {
 // 3. 接收书斋传来的全量笔记更新
 const handleUpdateNotes = (newNotes) => {
   savedNotes.value = newNotes;
+};
+
+// 4. 删除笔记 (供 NotesModal 使用)
+const handleDeleteNote = (noteId) => {
+  savedNotes.value = savedNotes.value.filter(n => n.id !== noteId);
 };
 </script>
 
