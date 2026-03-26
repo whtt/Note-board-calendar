@@ -26,7 +26,7 @@
       "output": "release"
     },
     "files": [
-      "frontend/dist/**/*", 
+      "frontend/dist/**/*",
       "main.js",
       "preload.js",
       "package.json"
@@ -44,9 +44,12 @@
       "shortcutName": "案头雅记"
     }
   },
-  "publish": null ,
+  "publish": null,
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "marked": "^17.0.5"
+  }
 }

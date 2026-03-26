@@ -15,7 +15,7 @@
           :todayStr="todayStr"
           :notes="savedNotes"
           @update:selectedDate="selectedDate = $event"
-          @enter-writing="switchMode('writing')"
+          @enter-writing="handleEnterWriting"  
           @save-poetry="handleSavePoetry"
           @write-essay="handleWriteEssay"
           @add-task="handleAddTask"
@@ -30,10 +30,10 @@
         
         <!-- 视图 B：灵感书斋 -->
         <WritingView 
+          ref="writingViewRef"
           v-show="currentMode === 'writing'"
           class="absolute inset-0 z-20"
-          :notes="savedNotes"
-          :incomingDraft="draftNote"
+          :notes="savedNotes"        
           @update-notes="handleUpdateNotes"
           @back="switchMode('dashboard')"
         />
@@ -304,7 +304,10 @@ const handleImportTasks = async (importedData) => {
 
 // ================= 🌟 诗词与灵感书斋交互 =================
 
-// 1. 仅收藏诗词 (生成摘录类笔记)
+// 🌟 核心：获取 WritingView 的实例，用来调用里面的方法
+const writingViewRef = ref(null);
+
+// 1. 仅收藏诗词 (生成摘录类笔记，保持不变)
 const handleSavePoetry = (poetry) => {
   const newNote = {
     id: 'note_' + Date.now(),
@@ -318,31 +321,46 @@ const handleSavePoetry = (poetry) => {
   alert('🔖 诗词已收录至灵感书斋。');
 };
 
-// 2. 写随笔 (核心联动：带入诗词草稿并跳转视图)
+// 2. 写随笔 (调用书斋魔法：不再产生无用草稿，直接携诗词跳入书斋)
 const handleWriteEssay = (poetry) => {
-  const draft = {
-    id: 'note_' + Date.now(),
-    type: 'prose', // 默认分类为散文随笔
-    title: `偶感 - ${poetry.author}`,
-    content: `> ${poetry.text}\n> —— ${poetry.source || poetry.author}\n\n（在此抒发你的量子灵感...）`,
-    date: selectedDate.value,
-    ai_metadata: {}
-  };
-  
-  // 插入并激活草稿
-  savedNotes.value.unshift(draft);
-  draftNote.value = draft; 
-  
-  // 触发全局视图跃迁
+  if (writingViewRef.value) {
+    writingViewRef.value.initFromPoetry(poetry.text, poetry.source || poetry.author);
+  }
   switchMode('writing');
 };
 
-// 3. 接收书斋传来的全量笔记更新
-const handleUpdateNotes = (newNotes) => {
-  savedNotes.value = newNotes;
+// 3. 从仪表盘/笔记列表 进入书斋
+const handleEnterWriting = (note) => {
+  if (writingViewRef.value) {
+    if (note && note.id) {
+      // 打开已有笔记
+      writingViewRef.value.openNote(note);
+    } else {
+      // 纯粹新建
+      writingViewRef.value.initNew('prose');
+    }
+  }
+  switchMode('writing');
 };
 
-// 4. 删除笔记 (供 NotesModal 使用)
+// 4. 接收书斋传来的【单篇】笔记更新
+const handleUpdateNotes = (newNote) => {
+  // 查找这篇笔记是否已存在
+  const index = savedNotes.value.findIndex(n => n.id === newNote.id);
+  
+  if (index !== -1) {
+    // 【编辑模式】：更新原数据
+    savedNotes.value[index] = { ...savedNotes.value[index], ...newNote };
+  } else {
+    // 【新建模式】：自动提取第一行作为标题，插入头部
+    const lines = newNote.content.split('\n').filter(l => l.trim() !== '');
+    newNote.title = lines.length > 0 ? lines[0].replace(/^[#>\s]*/, '').substring(0, 15) : '无题雅记';
+    newNote.date = selectedDate.value;
+    savedNotes.value.unshift(newNote);
+  }
+};
+
+// 5. 删除笔记 
 const handleDeleteNote = (noteId) => {
   savedNotes.value = savedNotes.value.filter(n => n.id !== noteId);
 };

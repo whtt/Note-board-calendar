@@ -99,8 +99,10 @@ const emit = defineEmits([
 
 const showModal = ref(false);
 
-const goToWriting = () => {
+// 接受组件传来的旧笔记参数
+const goToWriting = (note) => {
   showModal.value = false;
-  emit('enter-writing');
+  // 🌟 将 note 对象传给外层，告诉 App.vue 你要打开哪篇笔记
+  emit('enter-writing', note); 
 };
 </script>
