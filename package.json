@@ -1,0 +1,52 @@
+{
+  "name": "mycalendar",
+  "version": "1.0.0",
+  "description": "案头雅记 - 个人专属桌面工作台",
+  "main": "main.js",
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.5",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.0.4",
+    "electron-builder": "^26.8.1",
+    "vite": "^8.0.2",
+    "vue": "^3.5.30",
+    "wait-on": "^9.0.4"
+  },
+  "scripts": {
+    "dev": "vite",
+    "electron:dev": "cross-env NODE_ENV=development electron .",
+    "build:vue": "cd frontend && npm run build",
+    "build:exe": "npm run build:vue && cross-env NODE_ENV=production electron-builder"
+  },
+  "build": {
+    "appId": "com.quantum.workspace",
+    "productName": "案头雅记",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "frontend/dist/**/*", 
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "案头雅记"
+    }
+  },
+  "publish": null ,
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
