@@ -54,7 +54,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
 
 // ── Props ──────────────────────────────────────────
@@ -108,6 +108,16 @@ watch(() => props.cursorPos, async (pos) => {
     textareaRef.value.setSelectionRange(pos, pos)
   }
 }, { immediate: true })
+
+// 组件挂载后，霸道地抢夺光标！
+onMounted(() => {
+  if (viewMode.value !== 'preview') {
+    // 延迟 100ms 确保 DOM 和动画彻底渲染完毕，然后强制聚焦
+    setTimeout(() => {
+      textareaRef.value?.focus()
+    }, 100)
+  }
+})
 </script>
 
 <style>

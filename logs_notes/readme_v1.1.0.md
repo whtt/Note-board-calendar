@@ -101,14 +101,28 @@ MYCALENDAR/
 
 ## 🚀 启动与构建指引
 
+
+---
+
+## 🗺️ 版本路线图
+
+| 版本             | 代号           | 核心里程碑                                                                             |
+| ---------------- | -------------- | -------------------------------------------------------------------------------------- |
+| v1.0.0           | 初稿           | 日历三相 + 任务引擎 + 色彩演算                                                         |
+| **v1.1.0** | **墨梅** | **书斋写作中心 + Markdown 双层渲染 + 三视图切换 + 五体裁模板 + Electron 桌面化** |
+| v1.2.0           | 待定           | 本地 LLM 接入 + AI 情绪打标 + 向量知识检索                                             |
+
 系统现已由 Web 应用升级为原生桌面软件，请按以下步骤操作：
 
 ### 1. 依赖安装
 
 ```bash
+# 在项目根目录安装 Electron 等依赖
+npm install
 # 进入前端目录安装 Vue 相关依赖
 cd frontend
 npm install
+
 ```
 
 ### 2. 开发模式 (Development)
@@ -116,13 +130,15 @@ npm install
 开发时建议同时启动前端热更新和本地数据服务：
 
 ```bash
-# 终端 1：启动前端 UI (进入 frontend 目录)
+# 终端 1：启动本地数据引擎
+cd backend
+node server.js
+# 终端 2：启动前端 UI (进入 frontend 目录)
 cd frontend
 npm run dev
-
-# 终端 2：启动 Electron 桌面壳包载前端页面
-cd frontend
+# 终端 3：(可选) 启动 Electron 桌面壳包载前端页面
 npm run electron:dev
+
 ```
 
 ### 3. 一键打包输出 EXE (Production)

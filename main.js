@@ -128,7 +128,7 @@ function createWindow () {
   });
 
   // 💡 核心改造：判断是否是打包后的生产环境
-  if (process.env.NODE_ENV === 'development') {
+  if (!app.isPackaged) {
     // 开发环境：读取 Vite 本地服务器
     win.loadURL('http://localhost:5173'); 
     // win.webContents.openDevTools(); // 你可以解除注释来打开控制台

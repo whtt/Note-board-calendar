@@ -1,9 +1,20 @@
-<!-- src/App.vue (局部替换) -->
+<!-- src/App.vue (完整替换) -->
 <template>
-  <div class="min-h-screen bg-stone-100 text-stone-800 p-4 md:p-6 flex items-center justify-center font-sans">
+  <div class="min-h-screen bg-stone-100 text-stone-800 p-4 md:p-6 flex items-center justify-center font-sans relative">
+    
+    <!-- 🌟 [核心重构 1]：极其优雅的全局浮动通知 (Toast)，彻底替代原生 alert -->
+    <transition name="toast-fade">
+      <div v-if="toast.show" 
+           class="fixed top-8 left-1/2 -translate-x-1/2 z-[100] px-5 py-2.5 rounded-full shadow-lg shadow-stone-200/50 border text-[13px] font-medium flex items-center gap-2 transition-all backdrop-blur-md"
+           :class="toast.type === 'error' ? 'bg-red-50/90 text-red-600 border-red-200' : 'bg-teal-50/90 text-teal-700 border-teal-200'"
+      >
+        <span>{{ toast.message }}</span>
+      </div>
+    </transition>
+
     <div class="w-full max-w-[95vw] xl:max-w-7xl bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-stone-300/50 border border-stone-200 flex flex-col overflow-hidden h-[90vh] min-h-[750px] max-h-[1000px]">
       
-      <!-- 🌟 [核心重构]：100% 解决白屏的 v-show 方案 -->
+      <!-- 🌟 [核心重构 2]：100% 解决白屏的 v-show 方案 -->
       <div class="flex-1 overflow-hidden flex flex-col min-h-0 relative">
         <!-- 视图 A：案头仪表盘 -->
         <DashboardView 
@@ -35,11 +46,12 @@
           class="absolute inset-0 z-20"
           :notes="savedNotes"        
           @update-notes="handleUpdateNotes"
+          @delete-note="handleDeleteNote" 
           @back="switchMode('dashboard')"
         />
       </div>
 
-      <!-- 底层状态栏 (保持不变) -->
+      <!-- 底层状态栏 -->
       <div class="h-9 shrink-0 border-t border-stone-200 bg-stone-100/80 flex items-center justify-between px-4 text-[11px] text-stone-500 font-medium z-30">
         <div class="flex items-center gap-2 truncate max-w-[60%]">
           <span class="text-teal-500 animate-pulse">●</span> 
@@ -60,17 +72,26 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue';
-
-// 引入解耦后的两大视图
 import DashboardView from './views/DashboardView.vue';
 import WritingView from './views/WritingView.vue';
 
+// ================= 全局 Toast 通知引擎 =================
+const toast = ref({ show: false, message: '', type: 'success' });
+let toastTimer = null;
+const showToast = (message, type = 'success') => {
+  toast.value = { show: true, message, type };
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.value.show = false;
+  }, 3000); // 3秒后自动消失
+};
+
 // ================= 全局路由与视图状态 =================
-const currentMode = ref('dashboard'); // 'dashboard' | 'writing'
-const draftNote = ref(null); // 用于从诗词卡片带过去的临时草稿
+const currentMode = ref('dashboard'); 
+const draftNote = ref(null); 
 
 const switchMode = (mode) => {
-  if (mode === 'dashboard') draftNote.value = null; // 清除草稿状态
+  if (mode === 'dashboard') draftNote.value = null; 
   currentMode.value = mode;
 };
 
@@ -85,80 +106,67 @@ const todayStr = formatDate(new Date());
 const selectedDate = ref(todayStr);
 
 // ================= 数据初始化与持久化层 =================
-// (这里保留你原来的 loadSafeData, Electron挂载, watch 监听等完整逻辑，省略部分任务系统相同的操作)
 const tasks = ref([]); 
 const savedNotes = ref([]);
 const currentSavePath = ref('系统初始化中...');
-// ================= [核心改革] 桌面端 Electron 本地档案馆 =================
 let syncTimeout = null;
+
 const changeLocation = async () => {
   if (window.electronAPI) {
     const result = await window.electronAPI.changeStoragePath();
     if (result.success) {
       currentSavePath.value = result.path;
-      alert(`✅ 迁都成功！\n数据档案已成功迁移至：\n${result.path}`);
+      // 💡 替换原生 alert
+      showToast(`✅ 迁都成功！已迁移至：${result.path}`);
       await window.electronAPI.saveData('tasks', tasks.value);
       await window.electronAPI.saveData('notes', savedNotes.value);
     }
   } else {
-    alert('⚠️ 当前为网页预览模式，无法修改本地目录，请在桌面端运行。');
+    // 💡 替换原生 alert
+    showToast('⚠️ 当前为网页预览模式，无法修改本地目录，请在桌面端运行。', 'error');
   }
 };
+
 const loadSafeData = (key, defaultValue) => {
   try {
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : defaultValue;
   } catch (error) {
-    console.error(`读取 ${key} 失败，已重置为默认值`, error);
     return defaultValue;
   }
 };
 
 // ================= 统一的数据监听：触发【双写】 =================
 watch([tasks, savedNotes], (newValues) => {
-  // 💡 核心修复：将 Vue 的 Proxy 响应式对象“解包”为纯净的 JS 对象
-  // 不做这一步，Electron 的 IPC 通道会拒绝传输或传过去变成空对象！
   const plainTasks = JSON.parse(JSON.stringify(newValues[0]));
   const plainNotes = JSON.parse(JSON.stringify(newValues[1]));
   
-  // 1. 网页端缓存双写
   localStorage.setItem('quantumTasks_v3', JSON.stringify(plainTasks));
   localStorage.setItem('quantumNotes_v1', JSON.stringify(plainNotes));
   
-  // 2. 桌面端物理双写
   if (window.electronAPI) {
     if (syncTimeout) clearTimeout(syncTimeout);
     syncTimeout = setTimeout(async () => {
       try {
-        // 传递纯净数据
         await window.electronAPI.saveData('tasks', plainTasks);
         await window.electronAPI.saveData('notes', plainNotes);
-        console.log('💾 帝国档案已安全存入本地硬盘');
       } catch (error) {
         console.error('⚠️ 本地物理写入失败:', error);
       }
-    }, 1000); // 1秒防抖，避免频繁写入烧硬盘
+    }, 1000);
   }
 }, { deep: true });
 
-// ================= 初始化与数据加载 =================
 onMounted(async () => {
   if (window.electronAPI) {
     try {
-      // 1. 获取系统分配或用户选择的真实路径
       const path = await window.electronAPI.getStoragePath();
       currentSavePath.value = path;
-
-      // 2. 加载数据
       const loadedTasks = await window.electronAPI.loadData('tasks');
       const loadedNotes = await window.electronAPI.loadData('notes');
-      
       if (loadedTasks) tasks.value = loadedTasks;
       if (loadedNotes) savedNotes.value = loadedNotes;
-      
-      console.log('🌐 帝国档案馆数据加载完毕');
     } catch (error) {
-      console.error('⚠️ 数据加载失败，降级使用缓存', error);
       currentSavePath.value = '存储异常，已降级为缓存模式';
     }
   } else {
@@ -168,10 +176,9 @@ onMounted(async () => {
   }
 });
 
-// ================= 核心计算引擎 (恢复此承重墙) =================
+// ================= 核心计算引擎 =================
 const currentTasks = computed(() => {
   const date = selectedDate.value;
-  
   return tasks.value
     .filter(t => {
       if (t.type === 'single') return t.date === date || (!t.completed && t.date < date && date <= todayStr);
@@ -193,13 +200,9 @@ const currentTasks = computed(() => {
     });
 });
 
-// ================= 任务操作逻辑 (透传自 Dashboard) =================
+// ================= 任务操作逻辑 =================
 const handleAddTask = (newTaskData) => {
-  const task = { 
-    ...newTaskData, 
-    id: 'task_' + Date.now(),
-    subTasks: newTaskData.subTasks ||[] 
-  };
+  const task = { ...newTaskData, id: 'task_' + Date.now(), subTasks: newTaskData.subTasks ||[] };
   if (task.type === 'single') task.completed = false;
   else task.completedDates =[];
   tasks.value.push(task);
@@ -213,7 +216,6 @@ const handleToggleComplete = (taskId) => {
   const task = tasks.value.find(t => t.id === taskId);
   if (!task) return;
   const date = selectedDate.value;
-
   if (task.type === 'single') {
     task.completed = !task.completed;
     if (task.completed && task.subTasks) task.subTasks.forEach(sub => sub.completed = true);
@@ -239,7 +241,6 @@ const handleToggleSub = (taskId, subId) => {
   if (!task || !task.subTasks) return;
   const date = selectedDate.value;
   const sub = task.subTasks.find(s => s.id === subId);
-  
   if (task.type === 'single') {
     sub.completed = !sub.completed;
     task.completed = task.subTasks.every(s => s.completed);
@@ -275,20 +276,16 @@ const handleImportTasks = async (importedData) => {
   let count = 0;
   tasksToAdd.forEach((task, index) => {
     const timestamp = Date.now();
-    const newTaskId = `task_imp_${timestamp}_${index}`;
     const newTask = {
       ...task,
-      id: newTaskId,
+      id: `task_imp_${timestamp}_${index}`,
       type: task.type || 'single',
       startDate: selectedDate.value, 
       endDate: task.type === 'multi' ? task.endDate : selectedDate.value,
       completed: false, 
       completedDates: [],
       subTasks: (task.subTasks ||[]).map((sub, subIndex) => ({
-        ...sub,
-        id: `sub_imp_${timestamp}_${index}_${subIndex}`,
-        completed: false,
-        completedDates:[]
+        ...sub, id: `sub_imp_${timestamp}_${index}_${subIndex}`, completed: false, completedDates:[]
       }))
     };
     tasks.value.push(newTask);
@@ -299,15 +296,13 @@ const handleImportTasks = async (importedData) => {
     const plainTasks = JSON.parse(JSON.stringify(tasks.value));
     await window.electronAPI.saveData('tasks', plainTasks);
   }
-  alert(`✅ 雅记导入成功！\n已将 ${count} 项模板添加至 ${selectedDate.value} 的案头。`);
+  // 💡 替换原生 alert
+  showToast(`✅ 雅记导入成功！已添加 ${count} 项模板。`);
 };
 
 // ================= 🌟 诗词与灵感书斋交互 =================
-
-// 🌟 核心：获取 WritingView 的实例，用来调用里面的方法
 const writingViewRef = ref(null);
 
-// 1. 仅收藏诗词 (生成摘录类笔记，保持不变)
 const handleSavePoetry = (poetry) => {
   const newNote = {
     id: 'note_' + Date.now(),
@@ -318,10 +313,10 @@ const handleSavePoetry = (poetry) => {
     ai_metadata: {}
   };
   savedNotes.value.unshift(newNote);
-  alert('🔖 诗词已收录至灵感书斋。');
+  // 💡 [致病根源已铲除]：替换为温和的 Toast
+  showToast('🔖 诗词已收录至灵感书斋。');
 };
 
-// 2. 写随笔 (调用书斋魔法：不再产生无用草稿，直接携诗词跳入书斋)
 const handleWriteEssay = (poetry) => {
   if (writingViewRef.value) {
     writingViewRef.value.initFromPoetry(poetry.text, poetry.source || poetry.author);
@@ -329,30 +324,22 @@ const handleWriteEssay = (poetry) => {
   switchMode('writing');
 };
 
-// 3. 从仪表盘/笔记列表 进入书斋
 const handleEnterWriting = (note) => {
   if (writingViewRef.value) {
     if (note && note.id) {
-      // 打开已有笔记
       writingViewRef.value.openNote(note);
     } else {
-      // 纯粹新建
       writingViewRef.value.initNew('prose');
     }
   }
   switchMode('writing');
 };
 
-// 4. 接收书斋传来的【单篇】笔记更新
 const handleUpdateNotes = (newNote) => {
-  // 查找这篇笔记是否已存在
   const index = savedNotes.value.findIndex(n => n.id === newNote.id);
-  
   if (index !== -1) {
-    // 【编辑模式】：更新原数据
     savedNotes.value[index] = { ...savedNotes.value[index], ...newNote };
   } else {
-    // 【新建模式】：自动提取第一行作为标题，插入头部
     const lines = newNote.content.split('\n').filter(l => l.trim() !== '');
     newNote.title = lines.length > 0 ? lines[0].replace(/^[#>\s]*/, '').substring(0, 15) : '无题雅记';
     newNote.date = selectedDate.value;
@@ -360,13 +347,23 @@ const handleUpdateNotes = (newNote) => {
   }
 };
 
-// 5. 删除笔记 
 const handleDeleteNote = (noteId) => {
   savedNotes.value = savedNotes.value.filter(n => n.id !== noteId);
 };
 </script>
 
 <style>
+/* Toast 浮现动画 */
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -20px);
+}
+
 /* 视图切换动画 */
 .fade-slide-enter-active,
 .fade-slide-leave-active {

@@ -54,13 +54,41 @@
         </div>
       </div>
       
-      <!-- 封笔落锁 (淡粉/胭脂色调，如同落印) -->
-      <button 
-        @click="saveDraft" 
-        class="px-4 py-2 bg-rose-50 text-rose-600 border border-rose-200 text-xs tracking-widest rounded shadow-sm hover:bg-rose-100 hover:shadow transition-all"
-      >
-        封笔落锁 · Ctrl+S
-      </button>
+      <!-- ===== 右侧操作区：删除 + 保存 ===== -->
+      <div class="flex items-center space-x-3">
+        
+        <!-- 💡 核心改造：优雅的内联删除确认 -->
+        <div v-if="currentNoteId" class="flex items-center">
+          <!-- 默认状态：删除按钮 -->
+          <button 
+            v-if="!showDeleteConfirm"
+            @click="showDeleteConfirm = true"
+            class="flex items-center gap-1 text-stone-400 hover:text-red-500 transition-colors px-2 py-1 text-xs"
+            title="将此篇付之一炬"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+            <span>付之一炬</span>
+          </button>
+
+          <!-- 确认状态：防止误删的内联提示 -->
+          <div v-else class="flex items-center gap-2 text-[11px] bg-red-50 text-red-600 px-2.5 py-1 rounded border border-red-100 shadow-sm transition-all">
+            <span>确认焚毁？</span>
+            <button @click="executeDelete" class="hover:text-red-800 font-bold transition-colors">是</button>
+            <span class="text-red-200">|</span>
+            <button @click="showDeleteConfirm = false" class="hover:text-stone-500 text-stone-400 transition-colors">否</button>
+          </div>
+        </div>
+
+        <!-- 封笔落锁 (淡粉/胭脂色调，如同落印) -->
+        <button 
+          @click="saveDraft" 
+          class="px-4 py-2 bg-rose-50 text-rose-600 border border-rose-200 text-xs tracking-widest rounded shadow-sm hover:bg-rose-100 hover:shadow transition-all"
+        >
+          封笔落锁 · Ctrl+S
+        </button>
+      </div>
     </header>
 
     <!-- ===== 主体：侧边存档 + 书写区 ===== -->
@@ -98,7 +126,7 @@
               :key="note.id"
               @click="handleLoadNote(note)"
               :class="[
-                'p-3 cursor-pointer border-b border-stone-100/60 transition-all',
+                'p-3 cursor-pointer border-b border-stone-100/60 transition-all group',
                 currentNoteId === note.id
                   ? 'bg-blue-50/60 border-l-[3px] border-l-blue-400 pl-[9px]'
                   : 'hover:bg-stone-100/60 border-l-[3px] border-l-transparent'
@@ -116,7 +144,7 @@
                 {{ getPreview(note.content) }}
               </p>
               <!-- 日期 -->
-              <p class="text-[10px] text-stone-300 mt-1">{{ note.date }}</p>
+              <p class="text-[10px] text-stone-300 mt-1">{{ note.date || note.timestamp?.substring(0,10) }}</p>
             </div>
           </div>
         </aside>
@@ -125,15 +153,14 @@
       <!-- 右侧书写区 -->
       <main class="flex-1 min-w-0 overflow-hidden flex flex-col">
         <div class="flex-1 px-10 pt-6 pb-10 max-w-3xl mx-auto w-full overflow-hidden">
-          <keep-alive>
-            <component 
-              :is="currentModeComponent" 
-              :initial-content="existingContent"
-              :key="editorKey"
-              @update:content="handleContentUpdate"
-              v-bind="poetryProps"
-            />
-          </keep-alive>
+          <!-- 💡 删除了 <keep-alive>，每次切换或新建都强制挂载全新的纸张 -->
+          <component 
+            :is="currentModeComponent" 
+            :initial-content="existingContent"
+            :key="editorKey"
+            @update:content="handleContentUpdate"
+            v-bind="poetryProps"
+          />
         </div>
       </main>
 
@@ -156,8 +183,8 @@ const props = defineProps({
   notes: { type: Array, default: () => [] }
 })
 
-// ===== 事件 =====
-const emit = defineEmits(['back', 'update-notes'])
+// 💡 新增了 delete-note 事件的声明
+const emit = defineEmits(['back', 'update-notes', 'delete-note'])
 
 // ===== 体裁字典 =====
 const modes = [
@@ -175,12 +202,15 @@ const poetryProps    = ref({})
 const existingContent= ref('')      // 向子组件传递的旧内容
 const currentNoteId  = ref(null)    // 当前编辑的笔记 ID（null = 新建）
 const showPanel      = ref(true)    // 存档面板是否展开
+const freshKey       = ref(Date.now()) // 动态 Key 生成器
+const showDeleteConfirm = ref(false) // 控制内联确认框的状态
 
 // ===== 计算属性 =====
+// 新建时使用时间戳作为独一无二的 Key
 const editorKey = computed(() =>
   currentNoteId.value
     ? `edit-${currentNoteId.value}-${currentMode.value}`
-    : `new-${currentMode.value}-fresh`
+    : `new-${currentMode.value}-${freshKey.value}`
 )
 
 const currentModeComponent = computed(() => {
@@ -224,6 +254,7 @@ const handleLoadNote = (note) => {
   existingContent.value= note.content || ''
   currentContent.value = note.content || ''   
   poetryProps.value    = {}
+  showDeleteConfirm.value = false // 重置删除确认状态
 }
 
 // 【内部】新建一篇空白笔记
@@ -233,39 +264,50 @@ const handleCreateNew = () => {
   currentContent.value = ''
   poetryProps.value    = {}
   currentMode.value    = 'prose'
+  freshKey.value       = Date.now() // 每次新建时刷新印记，强制组件重新渲染，拒绝死锁
+  showDeleteConfirm.value = false // 重置删除确认状态
 }
 
 // 封笔落锁（保存）
 const saveDraft = () => {
   if (!currentContent.value?.trim()) {
     console.warn('【书斋】墨迹未干，暂无内容可存。')
-    return // 💡 修改1：为空时不强行退出，允许用户继续思考
+    return 
   }
 
-  // 自动从正文第一行提取标题
   const lines = currentContent.value.split('\n').filter(l => l.trim())
   const title = lines.length > 0
     ? lines[0].replace(/^[#>\s*`\-]*/g, '').substring(0, 20) || '无题雅记'
     : '无题雅记'
 
-  // 如果是新建，生成 ID
   const newId = currentNoteId.value || 'note_' + Date.now()
+
+  // 格式化日期 (YYYY-MM-DD)
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   const noteData = {
     id:        newId,
     type:      currentMode.value,
     title,
     content:   currentContent.value,
+    date:      dateStr,
     timestamp: new Date().toISOString()
   }
 
-  // 💡 修改2：更新当前的 Note ID，防止连续按 Ctrl+S 创建出多份复本
   currentNoteId.value = newId
-
-  // 触发全局保存
   emit('update-notes', noteData)
+}
+
+// 💡 焚毁此篇（删除当前笔记）
+const executeDelete = () => {
+  if (!currentNoteId.value) return
   
-  // 💡 修改3：移除了 closeWriting()。保存后留在当前界面，实现沉浸式不间断心流！
+  // 1. 发射删除信号给主板
+  emit('delete-note', currentNoteId.value)
+  
+  // 2. 清空桌面，强制铺开新纸
+  handleCreateNew()
 }
 
 // ===== 暴露给 App.vue 的遥控器接口 =====
@@ -304,7 +346,6 @@ onBeforeUnmount(()  => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <style scoped>
-/* 存档面板滑入/滑出动画 */
 .panel-slide-enter-active,
 .panel-slide-leave-active {
   transition: width 0.25s ease, opacity 0.2s ease;
@@ -316,7 +357,6 @@ onBeforeUnmount(()  => window.removeEventListener('keydown', handleKeydown))
   opacity: 0;
 }
 
-/* 笔记列表细滚动条 */
 .custom-scrollbar::-webkit-scrollbar        { width: 3px; }
 .custom-scrollbar::-webkit-scrollbar-track  { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb  { background: #d6d3d1; border-radius: 2px; }
